@@ -48,7 +48,7 @@ type Message struct {
 // ClientIF
 type ClientIF interface {
 	Publish(topic string, message *Message) (string, error)
-	Subscribe(subscriptionName string, ch chan *Message) error
+	Subscribe(subscriptionName string, messageProccesor func(message *Message) int) error
 }
 
 // Client implements ClientIF
@@ -95,15 +95,20 @@ func (c *Client) Publish(topicName string, message *Message) (string, error) {
 }
 
 // Subscribe
-func (c *Client) Subscribe(subscriptionName string, ch chan *Message) error {
+func (c *Client) Subscribe(subscriptionName string, messageProcessor func(message *Message) int) error {
 	sub := c.client.Subscription(subscriptionName)
 	ctx := context.Background()
 	err := sub.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
-		ch <- &Message{
+		status := messageProcessor(&Message{
 			Data:       msg.Data,
 			Attributes: msg.Attributes,
+		})
+
+		if status != 0 {
+			msg.Nack()
+		} else {
+			msg.Ack()
 		}
-		msg.Ack()
 	})
 	if err != nil {
 		return err
